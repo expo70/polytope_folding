@@ -1,0 +1,217 @@
+<html>
+<head>
+<meta charset='utf-8'>
+<link rel="stylesheet" type="text/css" href="./css/normalize.css" />
+<link rel="stylesheet" type="text/css" href="./css/style.css" />
+
+<title>Polytope</title>
+</head>
+
+<body>
+<div id="a-box">
+
+<a href="./polytope-folding.html">Folding Animations</a>
+<br><a href="./polytope-threejs.html">Folding Animations (interactive 3D)</a> - by using <a href="https://threejs.org/">three.js</a> library
+
+<h1>Edge-to-edge gluing algorithm</h1>
+
+<form name="input_form">
+<p>
+<table>
+<tr><td>Sample inputs:</td></tr>
+<tr>
+<td><img src="./image/polytope-02.png" /></td>
+<td><img src="./image/polytope-03.png" /></td>
+<td><img src="./image/polytope-04.png" /></td>
+</tr>
+<tr>
+<td align="center"><input type="radio" name="samples" value="1"></td>
+<td align="center"><input type="radio" name="samples" value="2"></td>
+<td align="center"><input type="radio" name="samples" value="3"></td>
+</tr>
+</table>
+</p>
+
+<p>
+<textarea id="shape_input" rows="8" cols="80"></textarea>
+</p>
+<input type="button" id="solve_button" value="Solve" /><input type="reset" value="Reset" />
+</form>
+
+<p>
+<blockquote>
+<pre id="output"></pre>
+</blockquote>
+</p>
+
+
+<h2>Souce code</h2>
+
+<p>
+The concept of the algorithm<br />
+<img src="./image/polytope-01.png" />
+</p>
+The algorithm is based on Anna Lubiw and Joseph O'Rourke, 1996 (<a href="http://erikdemaine.org/aleksandrov/">ref1</a>, <a href="http://www.ed.ehime-u.ac.jp/~hirata/folding/">ref2</a>).
+
+<p>polytope.py
+<blockquote><pre>
+"""
+edge-to-edge gluing algorithm
+"""
+class polytopeError(Exception):
+	pass
+
+# Latin cross
+sample_shape1 = {
+	'edges':  [1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+	'angles': [90,90,180,270,90,90,270,90,90,270,90,90,270,180]
+}
+sample_shape2 = {
+	'edges': [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+	'angles': [90,180,90,180,180,180,270,180,90,180,90,180,270,180,90,180,90,180,270,180,90,180,90,180,270,180,180,180]
+}
+sample_shape3 = {
+	'edges': [1,1,1,1,1,1,1,1,1,1],
+	'angles': [36,252,36,252,36,252,36,252,36,252] 
+}
+
+g_n_solutions = 0
+
+def edge_indices(i1,i2):
+	"""adjust the indices of edges (+1) for reading
+	"""
+	return (i1+1,i2+1)
+
+def print_matches(matches):
+	"""print edge-to-edge glues
+	"""
+	global g_n_solutions
+	g_n_solutions = g_n_solutions + 1
+	print("{0:02d}: {1}".format(g_n_solutions, [edge_indices(*m) for m in matches]))
+
+def divide_shape(start_edge_no, shape):
+	edges = shape['edges']
+	angles = shape['angles']
+	if len(edges) != len(angles):
+		raise polytopeError("Edge and angle numbers do not match.")
+	if len(edges)%2 != 0:
+		raise polytopeError("Edge and angle numbers should be even.")
+	if len(edges) == 0:
+		raise polytopeError("Input shape is empty.")
+	for i in range(1,len(edges),2):
+		if edges[i] != edges[0]: continue
+		
+		is_p1_ok = False
+		is_p2_ok = False
+		
+		p1_edges = edges[1:i]
+		if len(p1_edges) > 0:
+			p1_angles = angles[1:i]
+			p1_angles[0] = angles[1]+angles[i]
+			if p1_angles[0] > 360: continue
+			else: is_p1_ok = True
+		
+		p2_edges = edges[i+1:len(edges)]
+		if len(p2_edges) > 0:
+			p2_angles = angles[i+1:len(edges)]
+			p2_angles[0] = angles[0]+angles[i+1]
+			if p2_angles[0] > 360: continue
+			else: is_p2_ok = True
+		
+		divided = []
+		if is_p1_ok:
+			divided.append({'start_index': start_edge_no+1, 'shape': {'edges':p1_edges, 'angles':p1_angles}})
+		if is_p2_ok:
+			divided.append({'start_index': start_edge_no+i+1, 'shape': {'edges':p2_edges, 'angles':p2_angles}})
+		yield {'glue': (start_edge_no, start_edge_no+i), 'divided': divided}
+
+def glue_and_divide(shapes, matches, depth, max_depth):
+	if depth == max_depth:
+		print_matches(matches)
+		return
+	# try to divide the first dividable shape
+	for i in range(0,len(shapes)):
+		if shapes[i]['shape']==[]: continue
+		results = divide_shape(shapes[i]['start_index'], shapes[i]['shape'])
+		is_divided = False
+		for r in results:
+			is_divided = True
+			matches.append(r['glue'])
+			shapes1 = shapes[0:i]
+			shapes1.extend(r['divided'])
+			shapes1.extend(shapes[i+1:len(shapes)])
+			glue_and_divide(shapes1, matches, depth+1, max_depth)
+			matches.pop()
+		if is_divided: break
+	
+def main():
+	shapes0 = [{'start_index': 0, 'shape': sample_shape1}]
+	try:
+		glue_and_divide(shapes0, [], 0, len(shapes0[0]['shape']['edges'])//2)
+	except polytopeError as err:
+		print("Error: {0}".format(err))
+
+if __name__ == '__main__':
+	main()
+</pre></blockquote>
+
+
+
+
+
+</div>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script type="text/javascript">
+$(function(){
+	$('input[name="samples"]').click(function()
+	{
+		var sel = $('input[name="samples"]:checked').val();
+		if(sel == 1)
+		{
+			$('#shape_input').val("{\n\"edges\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n\"angles\": [90,90,180,270,90,90,270,90,90,270,90,90,270,180]\n}");
+		}
+		else if(sel == 2)
+		{
+			$('#shape_input').val("{\n\"edges\": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],\n\"angles\": [90,180,90,180,180,180,270,180,90,180,90,180,270,180,90,180,90,180,270,180,90,180,90,180,270,180,180,180]\n}");
+		}
+		else if(sel == 3)
+		{
+			$('#shape_input').val("{\n\"edges\": [1,1,1,1,1,1,1,1,1,1],\n\"angles\": [36,252,36,252,36,252,36,252,36,252]\n}");
+		}
+	});
+	$('#solve_button').click(function()
+	{
+		var json_text = $('#shape_input').val();
+		send(json_text);
+	});
+});
+
+function send(json_text)
+{
+	$.ajax({
+		type: 'POST',
+		url: './cgi-bin/polytope.cgi',
+		contentType: 'application/json',
+		data: json_text,
+		timeout: 10000,
+		success: function(data)
+		{
+			$('#output').empty();
+			//$('#output').text(data.text.replace(/\r\n/g,EOL));
+			if(data.text=="")$('#output').text("No solutions.");
+			else $('#output').text(data.text);
+		},
+		error: function(XMLHttpRequest, textStatus, errorThrown)
+		{
+			$('#output').empty();
+			$('#output').text("Sorry, timeout.");
+		}
+	});
+	return false;
+}
+</script>
+
+</body>
+</html>
+

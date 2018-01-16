@@ -1,0 +1,212 @@
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+#container {
+  background: #222626;
+  position:absolute;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
+#info {
+	position: absolute;
+	top: 0px;
+	width: 100%;
+	padding: 5px;
+	color: #ffffff;
+	text-align: center;
+}
+#credits{
+	position:absolute;
+	width:100%;
+	bottom:0;
+	margin-bottom:20px;
+	color:#3d565e;
+	text-align : center;
+}
+#credits a {
+	color:#3d565e;
+}
+</style>
+<title>Polytope folding in 3D</title>
+</head>
+<body>
+
+
+<div id="container"></div>
+<div id="info"><br>Use mouse to rotate</div>
+<div id="credits">Polytope Folding by <a href="http://expo70.xyz">Expo70</a>, 2017, utilizing Three.js, jQuery libraries.
+</div>
+
+<script src="js/jquery-3.2.1.min.js"></script>
+<script src="js/three.min.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/Detector.js"></script>
+
+<script>
+
+if(!Detector.webgl)Detector.addGetWebGLMessage();
+
+var container;
+var camera, scene, renderer, effect, controls;
+var face_infos = [];
+var keys = [];
+
+init();
+animate();
+
+function init()
+{
+	container = $('#container')[0];
+	camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight,1,2000);
+	camera.position.set(0,-500,700);
+	camera.lookAt(new THREE.Vector3(0,0,0));
+
+	scene = new THREE.Scene();
+	scene.fog = new THREE.Fog(0x363d3d,-1,3000);
+
+	var light = new THREE.HemisphereLight(0xffffff, 0xffffff, .5)
+  	
+ 	var shadowLight = new THREE.DirectionalLight(0xffffff, .8);
+	shadowLight.position.set(200, 200, 200);
+	shadowLight.castShadow = true;
+ 	
+	var backLight = new THREE.DirectionalLight(0xffffff, .4);
+	backLight.position.set(-100, 200, 50);
+	backLight.castShadow = true;
+ 	
+	scene.add(backLight);
+	scene.add(light);
+	scene.add(shadowLight);
+
+	var whiteMat = new THREE.MeshLambertMaterial({ color: 0xffffff, shading: THREE.FlatShading, side: THREE.BackSide });
+	var scale = 100;
+	
+	$.getJSON("cocoon.json", function(data){
+		$.each(data, function(i,face)
+		{
+			var is_first = true;
+			var face_ori = face.vertices2d[0];
+			var face_axis = new THREE.Vector3(face.vertices2d[1][0]-face_ori[0], face.vertices2d[1][1]-face_ori[1], 0);
+			
+			var face_shape = new THREE.Shape();
+			$.each(face.vertices2d, function(j,v)
+			{
+				if(is_first)
+				{
+					face_shape.moveTo(0,0);
+					is_first = false;
+				}
+				else
+				{
+					face_shape.lineTo((v[0]-face_ori[0])*scale, (v[1]-face_ori[1])*scale);
+				}
+			});
+			face_shape.lineTo(0,0); //closing path
+			
+			var face_geom = new THREE.ShapeGeometry(face_shape);
+			var frontMat = new THREE.MeshLambertMaterial({color: HSVtoRGB((face.id-1)/data.length,1,1), shading: THREE.FlatShading, side: THREE.FrontSide});
+			var face_mesh = new THREE.SceneUtils.createMultiMaterialObject(face_geom, [frontMat, whiteMat]);
+			if(face.parent_id == 0)//root face
+			{
+				scene.add(face_mesh);
+				face_mesh.position.set(face_ori[0]*scale, face_ori[1]*scale, 0);
+			}
+			else
+			{
+				for(k in face_infos)
+				{
+					if(face_infos[k].id == face.parent_id)
+					{
+						face_infos[k].mesh.add(face_mesh);
+						face_mesh.position.set((face_ori[0]-face_infos[k].ori[0])*scale, (face_ori[1]-face_infos[k].ori[1])*scale, 0);
+						break;
+					}
+				}
+			}
+			
+			face_infos.push({ id: face.id, ori: face_ori, axis: face_axis.normalize(), mesh: face_mesh });
+		});
+		
+	});
+
+	renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+	renderer.setPixelRatio(window.devicePixelRatio);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	container.appendChild(renderer.domElement);
+	
+	controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+	for(var i=0; i<=100; i++)keys.push(i/100.0);
+	for(var i=0; i<=100; i++)keys.push(1.0);
+	for(var i=0; i<=100; i++)keys.push(1.0-i/100.0);
+	for(var i=0; i<=100; i++)keys.push(0.0);
+	
+	window.addEventListener('resize', onWindowResize, false);
+}
+
+function onWindowResize()
+{
+	camera.aspect = window.innerWidth/window.innerHeight;
+	camera.updateProjectionMatrix();
+	
+	renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate()
+{
+	requestAnimationFrame(animate);
+
+	controls.update();
+	render();
+}
+
+var key = 0;
+var folding = [0, 1.570796260522916, 1.5707962855809767, 1.2309594454632682, 1.570796330165161, 2.3005238603234424, 2.300523886256553, 
+ -1.5707961189877275, 1.2309593384616904, 2.3005239711738876];
+
+function render()
+{
+	$.each(face_infos, function(i,info)
+	{
+		if(i>0)
+		{
+			info.mesh.rotation.set(0,0,0);
+			info.mesh.rotateOnAxis(info.axis, keys[key]*folding[i]);	
+		}
+	});
+	key++;
+	if(key >= keys.length)key = 0;
+	
+	renderer.render(scene, camera);
+}
+
+function HSVtoRGB(h, s, v)
+{
+	var r, g, b, i, f, p, q, t, composed;
+	i = Math.floor(h * 6);
+	f = h * 6 - i;
+	p = v * (1 - s);
+	q = v * (1 - f * s);
+	t = v * (1 - (1 - f) * s);
+	switch (i % 6)
+	{
+	case 0: r = v, g = t, b = p; break;
+	case 1: r = q, g = v, b = p; break;
+	case 2: r = p, g = v, b = t; break;
+	case 3: r = p, g = q, b = v; break;
+	case 4: r = t, g = p, b = v; break;
+	case 5: r = v, g = p, b = q; break;
+	}
+	composed = ((Math.round(r*255))<<16) + ((Math.round(g*255))<<8) + (Math.round(b*255));
+	return composed;
+}
+
+
+</script>
+
+
+</body>
+</html>
+
